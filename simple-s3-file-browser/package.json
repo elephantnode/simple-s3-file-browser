@@ -23,8 +23,12 @@
     "security-test": "npm run security-audit && npm run lint"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.850.0",
+    "@aws-sdk/credential-providers": "^3.848.0",
+    "@aws-sdk/s3-request-presigner": "^3.850.0",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "electron-store": "^10.1.0",
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {

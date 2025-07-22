@@ -2,6 +2,8 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { CredentialsManager } from './credentials'
+import { MainProcessS3Service } from './s3Service'
 
 function createWindow(): void {
   // Create the browser window with enhanced security settings.
@@ -71,7 +73,6 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron.simple-s3-file-browser')
 
   // セキュリティ: カスタムプロトコルの設定
@@ -104,6 +105,95 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  // 認証情報管理のIPCハンドラ
+  const credentialsManager = CredentialsManager.getInstance()
+
+  ipcMain.handle('credentials:save', async (_, credentials) => {
+    return await credentialsManager.saveCredentials(credentials)
+  })
+
+  ipcMain.handle('credentials:load', async () => {
+    return await credentialsManager.loadCredentials()
+  })
+
+  ipcMain.handle('credentials:delete', async () => {
+    return await credentialsManager.deleteCredentials()
+  })
+
+  ipcMain.handle('credentials:has', async () => {
+    return await credentialsManager.hasCredentials()
+  })
+
+  // S3操作のIPCハンドラ
+  let s3Service: MainProcessS3Service | null = null
+
+  ipcMain.handle('s3:init', async () => {
+    try {
+      const credentials = await credentialsManager.loadCredentials()
+      if (credentials) {
+        // 既存のS3サービスがある場合は破棄
+        if (s3Service) {
+          s3Service.destroy()
+        }
+        s3Service = new MainProcessS3Service(credentials)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Failed to initialize S3 service:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('s3:testConnection', async () => {
+    if (!s3Service) {
+      throw new Error('S3 service not initialized')
+    }
+    return await s3Service.testConnection()
+  })
+
+  ipcMain.handle('s3:listObjects', async (_, prefix, continuationToken) => {
+    if (!s3Service) {
+      throw new Error('S3 service not initialized')
+    }
+    return await s3Service.listObjects(prefix, continuationToken)
+  })
+
+  ipcMain.handle('s3:uploadFile', async (_, fileBuffer, key, contentType) => {
+    if (!s3Service) {
+      throw new Error('S3 service not initialized')
+    }
+    return await s3Service.uploadFile(Buffer.from(fileBuffer), key, contentType)
+  })
+
+  ipcMain.handle('s3:getDownloadUrl', async (_, key, expiresIn) => {
+    if (!s3Service) {
+      throw new Error('S3 service not initialized')
+    }
+    return await s3Service.getDownloadUrl(key, expiresIn)
+  })
+
+  ipcMain.handle('s3:deleteObject', async (_, key) => {
+    if (!s3Service) {
+      throw new Error('S3 service not initialized')
+    }
+    return await s3Service.deleteObject(key)
+  })
+
+  ipcMain.handle('s3:copyObject', async (_, sourceKey, destinationKey) => {
+    if (!s3Service) {
+      throw new Error('S3 service not initialized')
+    }
+    return await s3Service.copyObject(sourceKey, destinationKey)
+  })
+
+  ipcMain.handle('s3:createFolder', async (_, folderPath) => {
+    if (!s3Service) {
+      throw new Error('S3 service not initialized')
+    }
+    return await s3Service.createFolder(folderPath)
+  })
 
   createWindow()
 
