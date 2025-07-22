@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+// @ts-ignore - TailwindCSS v4 types
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({

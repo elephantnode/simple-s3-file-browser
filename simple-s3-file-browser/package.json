@@ -18,7 +18,9 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "security-audit": "npm audit && npm run typecheck",
+    "security-test": "npm run security-audit && npm run lint"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

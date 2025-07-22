@@ -4,7 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
-  // Create the browser window.
+  // Create the browser window with enhanced security settings.
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -13,7 +13,13 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      // セキュリティ設定: プロセス分離とコンテキスト分離
+      sandbox: false, // プリロードスクリプト使用のためfalse
+      contextIsolation: true, // レンダラープロセスとメインプロセスの分離
+      nodeIntegration: false, // レンダラープロセスでのNode.js API無効化
+      webSecurity: true, // Web セキュリティ有効
+      allowRunningInsecureContent: false, // 安全でないコンテンツの実行を禁止
+      experimentalFeatures: false // 実験的機能を無効化
     }
   })
 
@@ -24,6 +30,31 @@ function createWindow(): void {
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  // セキュリティ: ナビゲーション制限
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // 現在のURLと異なる場合はナビゲーションを阻止
+    if (url !== mainWindow.webContents.getURL()) {
+      console.log('Navigation blocked:', url)
+      event.preventDefault()
+    }
+  })
+
+  // セキュリティ: 外部リソース読み込み制限
+  mainWindow.webContents.session.webRequest.onBeforeRequest((details, callback) => {
+    const url = details.url
+
+    // HTTP/HTTPSリクエストをチェック
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // localhostのみ許可（開発時のHMR用）
+      if (!url.startsWith('http://localhost:') && !url.startsWith('https://localhost:')) {
+        console.log('External resource blocked:', url)
+        callback({ cancel: true })
+        return
+      }
+    }
+    callback({ cancel: false })
   })
 
   // HMR for renderer base on electron-vite cli.
@@ -40,11 +71,33 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  // Set app user model id for windows
+  electronApp.setAppUserModelId('com.electron.simple-s3-file-browser')
+
+  // セキュリティ: カスタムプロトコルの設定
+  app.setAsDefaultProtocolClient('simple-s3-file-browser')
+
+  // セキュリティ: webview の作成を禁止
+  app.on('web-contents-created', (_, contents) => {
+    contents.on('will-attach-webview', (event) => {
+      console.log('Webview attachment blocked')
+      event.preventDefault()
+    })
+
+    // セキュリティ: レンダラープロセスでの新しいウィンドウ作成を制限
+    contents.on('will-navigate', (event, navigationUrl) => {
+      const parsedUrl = new URL(navigationUrl)
+
+      // ローカルファイル以外へのナビゲーションを制限
+      if (parsedUrl.origin !== 'file://' && !parsedUrl.origin.startsWith('http://localhost:')) {
+        console.log('Navigation blocked at app level:', navigationUrl)
+        event.preventDefault()
+      }
+    })
+  })
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
